@@ -402,7 +402,7 @@ static CvContour* MSERToContour( MSERConnectedComp* comp, CvMemStorage* storage 
         pt->y = lpt->pt.y;
         lpt = lpt->next;
     }
-    cvBoundingRect( contour );
+    cvBoundingRect( contour, 1 );
 
     contour->h_next = contour->h_prev = contour->v_next = contour->v_prev = NULL;
     
