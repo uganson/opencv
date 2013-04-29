@@ -175,6 +175,8 @@ typedef struct MSERConnectedComp
     int size;
     int dvar; // the derivative of last var
     float var; // the current variation (most time is the variation of one-step back)
+
+    CvContour *children;
 }
 MSERConnectedComp;
 
@@ -217,6 +219,7 @@ initMSERComp( MSERConnectedComp* comp )
     comp->var = 0;
     comp->dvar = 1;
     comp->history = NULL;
+    comp->children = NULL;
 }
 
 // add history of size to a connected component
@@ -302,6 +305,24 @@ MSERMergeComp( MSERConnectedComp* comp1,
         tail = ( comp1->size > 0 ) ? comp1->tail : comp2->tail;
         // always made the newly added in the last of the pixel list (comp2 ... comp1)
     }
+
+    CvContour *child1 = comp1->children;
+    CvContour *child2 = comp2->children;
+    
+    comp1->children = NULL;
+    comp2->children = NULL;
+    
+    CvContour *it = child1;
+    if (it != NULL) {
+        comp->children = child1;
+        while (it->h_next)
+            it = (CvContour *)it->h_next;
+        it->h_next = (CvSeq *)child2;
+        if (child2)
+            child2->h_prev = (CvSeq *)it;
+    } else
+        comp->children = child2;
+
     comp->head = head;
     comp->tail = tail;
     comp->history = history;
@@ -382,6 +403,18 @@ static CvContour* MSERToContour( MSERConnectedComp* comp, CvMemStorage* storage 
         lpt = lpt->next;
     }
     cvBoundingRect( contour );
+
+    contour->h_next = contour->h_prev = contour->v_next = contour->v_prev = NULL;
+    
+    CvContour *it = comp->children;
+    while (it != NULL) {
+        it->v_prev = (CvSeq *)contour;
+        it = (CvContour *)it->h_next;
+    }
+    contour->v_next = (CvSeq *)comp->children;
+    
+    comp->children = contour;
+
     return contour;
 }
 
@@ -666,7 +699,12 @@ static void extractMSER_8UC1( CvMat* src,
     // darker to brighter (MSER-)
     imgptr = preprocessMSER_8UC1( img, heap_start, src, mask );
     extractMSER_8UC1_Pass( ioptr, imgptr, heap_start, pts, history, comp, step, stepmask, stepgap, params, -1, contours, storage );
-    // brighter to darker (MSER+)
+
+    // Clear the unstable components
+    for(int i = 0; i < 257; i++)
+        comp[i].children = NULL;
+
+     // brighter to darker (MSER+)
     imgptr = preprocessMSER_8UC1( img, heap_start, src, mask );
     extractMSER_8UC1_Pass( ioptr, imgptr, heap_start, pts, history, comp, step, stepmask, stepgap, params, 1, contours, storage );
 
