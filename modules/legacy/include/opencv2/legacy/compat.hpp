@@ -649,6 +649,8 @@ CVAPI(void) cvExtractSURF( const CvArr* img, const CvArr* mask,
                           CvMemStorage* storage, CvSURFParams params,
                              int useProvidedKeyPts CV_DEFAULT(0)  );
 
+// This is moved back to MSER by uganson
+#if 0
 /*!
  Maximal Stable Regions Parameters
  */
@@ -687,6 +689,7 @@ CVAPI(CvMSERParams) cvMSERParams( int delta CV_DEFAULT(5), int min_area CV_DEFAU
 // Extracts the contours of Maximally Stable Extremal Regions
 CVAPI(void) cvExtractMSER( CvArr* _img, CvArr* _mask, CvSeq** contours, CvMemStorage* storage, CvMSERParams params );
 
+#endif
 
 typedef struct CvStarKeypoint
 {

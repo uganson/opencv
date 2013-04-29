@@ -175,6 +175,8 @@ typedef struct MSERConnectedComp
     int size;
     int dvar; // the derivative of last var
     float var; // the current variation (most time is the variation of one-step back)
+
+    CvContour *children;
 }
 MSERConnectedComp;
 
@@ -193,10 +195,10 @@ struct MSERParams
 {
     MSERParams( int _delta, int _minArea, int _maxArea, double _maxVariation,
                 double _minDiversity, int _maxEvolution, double _areaThreshold,
-                double _minMargin, int _edgeBlurSize )
+                double _minMargin, int _edgeBlurSize, size_t _header_size )
         : delta(_delta), minArea(_minArea), maxArea(_maxArea), maxVariation(_maxVariation),
         minDiversity(_minDiversity), maxEvolution(_maxEvolution), areaThreshold(_areaThreshold),
-        minMargin(_minMargin), edgeBlurSize(_edgeBlurSize)
+        minMargin(_minMargin), edgeBlurSize(_edgeBlurSize), header_size(_header_size)
     {}
     int delta;
     int minArea;
@@ -207,6 +209,7 @@ struct MSERParams
     double areaThreshold;
     double minMargin;
     int edgeBlurSize;
+    size_t header_size;
 };
 
 // clear the connected component in stack
@@ -217,6 +220,7 @@ initMSERComp( MSERConnectedComp* comp )
     comp->var = 0;
     comp->dvar = 1;
     comp->history = NULL;
+    comp->children = NULL;
 }
 
 // add history of size to a connected component
@@ -302,6 +306,24 @@ MSERMergeComp( MSERConnectedComp* comp1,
         tail = ( comp1->size > 0 ) ? comp1->tail : comp2->tail;
         // always made the newly added in the last of the pixel list (comp2 ... comp1)
     }
+
+    CvContour *child1 = comp1->children;
+    CvContour *child2 = comp2->children;
+    
+    comp1->children = NULL;
+    comp2->children = NULL;
+    
+    CvContour *it = child1;
+    if (it != NULL) {
+        comp->children = child1;
+        while (it->h_next)
+            it = (CvContour *)it->h_next;
+        it->h_next = (CvSeq *)child2;
+        if (child2)
+            child2->h_prev = (CvSeq *)it;
+    } else
+        comp->children = child2;
+
     comp->head = head;
     comp->tail = tail;
     comp->history = history;
@@ -368,9 +390,9 @@ static void accumulateMSERComp( MSERConnectedComp* comp, LinkedPoint* point )
 }
 
 // convert the point set to CvSeq
-static CvContour* MSERToContour( MSERConnectedComp* comp, CvMemStorage* storage )
+static CvContour* MSERToContour( MSERConnectedComp* comp, CvMemStorage* storage, size_t header_size )
 {
-    CvSeq* _contour = cvCreateSeq( CV_SEQ_KIND_GENERIC|CV_32SC2, sizeof(CvContour), sizeof(CvPoint), storage );
+    CvSeq* _contour = cvCreateSeq( CV_SEQ_KIND_GENERIC|CV_32SC2, std::max(sizeof(CvContour), header_size), sizeof(CvPoint), storage );
     CvContour* contour = (CvContour*)_contour;
     cvSeqPushMulti( _contour, 0, comp->history->size );
     LinkedPoint* lpt = comp->head;
@@ -381,7 +403,19 @@ static CvContour* MSERToContour( MSERConnectedComp* comp, CvMemStorage* storage 
         pt->y = lpt->pt.y;
         lpt = lpt->next;
     }
-    cvBoundingRect( contour );
+    cvBoundingRect( contour, 1 );
+
+    contour->h_next = contour->h_prev = contour->v_next = contour->v_prev = NULL;
+    
+    CvContour *it = comp->children;
+    while (it != NULL) {
+        it->v_prev = (CvSeq *)contour;
+        it = (CvContour *)it->h_next;
+    }
+    contour->v_next = (CvSeq *)comp->children;
+    
+    comp->children = contour;
+
     return contour;
 }
 
@@ -595,7 +629,7 @@ static void extractMSER_8UC1_Pass( int* ioptr,
                     // check the stablity and push a new history, increase the grey level
                     if ( MSERStableCheck( comptr, params ) )
                     {
-                        CvContour* contour = MSERToContour( comptr, storage );
+                        CvContour* contour = MSERToContour( comptr, storage, params.header_size );
                         contour->color = color;
                         cvSeqPush( contours, &contour );
                     }
@@ -616,7 +650,7 @@ static void extractMSER_8UC1_Pass( int* ioptr,
                             // check the stablity here otherwise it wouldn't be an ER
                             if ( MSERStableCheck( comptr, params ) )
                             {
-                                CvContour* contour = MSERToContour( comptr, storage );
+                                CvContour* contour = MSERToContour( comptr, storage, params.header_size );
                                 contour->color = color;
                                 cvSeqPush( contours, &contour );
                             }
@@ -666,7 +700,12 @@ static void extractMSER_8UC1( CvMat* src,
     // darker to brighter (MSER-)
     imgptr = preprocessMSER_8UC1( img, heap_start, src, mask );
     extractMSER_8UC1_Pass( ioptr, imgptr, heap_start, pts, history, comp, step, stepmask, stepgap, params, -1, contours, storage );
-    // brighter to darker (MSER+)
+
+    // Clear the unstable components
+    for(int i = 0; i < 257; i++)
+        comp[i].children = NULL;
+
+     // brighter to darker (MSER+)
     imgptr = preprocessMSER_8UC1( img, heap_start, src, mask );
     extractMSER_8UC1_Pass( ioptr, imgptr, heap_start, pts, history, comp, step, stepmask, stepgap, params, 1, contours, storage );
 
@@ -1255,11 +1294,13 @@ extractMSER( CvArr* _img,
 MSER::MSER( int _delta, int _min_area, int _max_area,
       double _max_variation, double _min_diversity,
       int _max_evolution, double _area_threshold,
-      double _min_margin, int _edge_blur_size )
+      double _min_margin, int _edge_blur_size,
+      size_t _header_size)
     : delta(_delta), minArea(_min_area), maxArea(_max_area),
     maxVariation(_max_variation), minDiversity(_min_diversity),
     maxEvolution(_max_evolution), areaThreshold(_area_threshold),
-    minMargin(_min_margin), edgeBlurSize(_edge_blur_size)
+    minMargin(_min_margin), edgeBlurSize(_edge_blur_size),
+    header_size(_header_size)
 {
 }
 
@@ -1272,7 +1313,7 @@ void MSER::operator()( const Mat& image, std::vector<std::vector<Point> >& dstco
     Seq<CvSeq*> contours;
     extractMSER( &_image, pmask, &contours.seq, storage,
                  MSERParams(delta, minArea, maxArea, maxVariation, minDiversity,
-                            maxEvolution, areaThreshold, minMargin, edgeBlurSize));
+                            maxEvolution, areaThreshold, minMargin, edgeBlurSize, header_size));
     SeqIterator<CvSeq*> it = contours.begin();
     size_t i, ncontours = contours.size();
     dstcontours.resize(ncontours);
@@ -1280,6 +1321,37 @@ void MSER::operator()( const Mat& image, std::vector<std::vector<Point> >& dstco
         Seq<Point>(*it).copyTo(dstcontours[i]);
 }
 
+void MSER::operator()( const Mat& image, std::vector<std::vector<Point> >& dstcontours, std::vector<Vec4i>& hierarchy, const Mat& mask ) const
+{
+    CvMat _image = image, _mask, *pmask = 0;
+    if( mask.data )
+        pmask = &(_mask = mask);
+    MemStorage storage(cvCreateMemStorage(0));
+    Seq<CvSeq*> contours;
+    extractMSER( &_image, pmask, &contours.seq, storage,
+                 MSERParams(delta, minArea, maxArea, maxVariation, minDiversity,
+                            maxEvolution, areaThreshold, minMargin, edgeBlurSize, header_size));
+    SeqIterator<CvSeq*> it = contours.begin();
+    size_t i, ncontours = contours.size();
+    dstcontours.resize(ncontours);
+    for( i = 0; i < ncontours; i++, ++it ) {
+        Seq<Point>(*it).copyTo(dstcontours[i]);
+        ((CvContour *)*it)->color = (int)i;
+    }
+
+    hierarchy.resize(ncontours);
+        
+    it = contours.begin();
+    for( i = 0; i < ncontours; i++, ++it )
+    {
+        CvContour* c = (CvContour *)*it;
+        int h_next = c->h_next ? ((CvContour*)c->h_next)->color : -1;
+        int h_prev = c->h_prev ? ((CvContour*)c->h_prev)->color : -1;
+        int v_next = c->v_next ? ((CvContour*)c->v_next)->color : -1;
+        int v_prev = c->v_prev ? ((CvContour*)c->v_prev)->color : -1;
+        hierarchy[i] = Vec4i(h_next, h_prev, v_next, v_prev);
+    }
+}
 
 void MserFeatureDetector::detectImpl( const Mat& image, std::vector<KeyPoint>& keypoints, const Mat& mask ) const
 {
@@ -1302,3 +1374,31 @@ void MserFeatureDetector::detectImpl( const Mat& image, std::vector<KeyPoint>& k
 }
 
 }
+
+CvMSERParams cvMSERParams( int delta, int minArea, int maxArea, float maxVariation, float minDiversity, int maxEvolution, double areaThreshold, double minMargin, int edgeBlurSize, size_t header_size )
+{
+	CvMSERParams params;
+	params.delta = delta;
+	params.minArea = minArea;
+	params.maxArea = maxArea;
+	params.maxVariation = maxVariation;
+	params.minDiversity = minDiversity;
+	params.maxEvolution = maxEvolution;
+	params.areaThreshold = areaThreshold;
+	params.minMargin = minMargin;
+	params.edgeBlurSize = edgeBlurSize;
+	params.header_size = header_size;
+	return params;
+}
+
+void cvExtractMSER( CvArr* _img,
+	       CvArr* _mask,
+	       CvSeq** _contours,
+	       CvMemStorage* storage,
+	       CvMSERParams params )
+{
+    cv::extractMSER( _img, _mask, _contours, storage,
+                     cv::MSERParams(params.delta, params.minArea, params.maxArea, params.maxVariation, params.minDiversity,
+                     params.maxEvolution, params.areaThreshold, params.minMargin, params.edgeBlurSize, params.header_size));
+}
+

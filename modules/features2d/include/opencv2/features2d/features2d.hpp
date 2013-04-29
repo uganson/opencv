@@ -509,11 +509,15 @@ public:
     CV_WRAP explicit MSER( int _delta=5, int _min_area=60, int _max_area=14400,
           double _max_variation=0.25, double _min_diversity=.2,
           int _max_evolution=200, double _area_threshold=1.01,
-          double _min_margin=0.003, int _edge_blur_size=5 );
+          double _min_margin=0.003, int _edge_blur_size=5,
+          size_t _header_size=0 );
 
     //! the operator that extracts the MSERs from the image or the specific part of it
     CV_WRAP_AS(detect) void operator()( const Mat& image, CV_OUT std::vector<std::vector<Point> >& msers,
                                         const Mat& mask=Mat() ) const;
+    CV_WRAP_AS(detect) void operator()( const Mat& image, CV_OUT std::vector<std::vector<Point> >& msers,
+                                        CV_OUT std::vector<Vec4i>& hierarchy, const Mat& mask ) const;
+
     AlgorithmInfo* info() const;
 
 protected:
@@ -528,6 +532,7 @@ protected:
     double areaThreshold;
     double minMargin;
     int edgeBlurSize;
+    size_t header_size;
 };
 
 typedef MSER MserFeatureDetector;
@@ -1602,6 +1607,50 @@ protected:
 };
 
 } /* namespace cv */
+
+// LEGACY SUPPORT FOR MSER
+/*!
+ Maximal Stable Regions Parameters
+*/
+typedef struct CvMSERParams
+{
+    //! delta, in the code, it compares (size_{i}-size_{i-delta})/size_{i-delta}
+    int delta;
+    //! prune the area which bigger than maxArea
+    int maxArea;
+    //! prune the area which smaller than minArea
+    int minArea;
+    //! prune the area have simliar size to its children
+    float maxVariation;
+    //! trace back to cut off mser with diversity < min_diversity
+    float minDiversity;
+    
+    /////// the next few params for MSER of color image
+    
+    //! for color image, the evolution steps
+    int maxEvolution;
+    //! the area threshold to cause re-initialize
+    double areaThreshold;
+    //! ignore too small margin
+    double minMargin;
+    //! the aperture size for edge blur
+    int edgeBlurSize;
+
+    //! the required header size for CvSeq allocations
+    size_t header_size;
+} CvMSERParams;
+
+CVAPI(CvMSERParams) cvMSERParams( int delta CV_DEFAULT(5), int min_area CV_DEFAULT(60),
+                           int max_area CV_DEFAULT(14400), float max_variation CV_DEFAULT(.25f),
+                           float min_diversity CV_DEFAULT(.2f), int max_evolution CV_DEFAULT(200),
+                           double area_threshold CV_DEFAULT(1.01),
+                           double min_margin CV_DEFAULT(.003),
+                           int edge_blur_size CV_DEFAULT(5),
+                           size_t header_size CV_DEFAULT(0) );
+
+// Extracts the contours of Maximally Stable Extremal Regions
+CVAPI(void) cvExtractMSER( CvArr* _img, CvArr* _mask, CvSeq** contours, CvMemStorage* storage, CvMSERParams params ); 
+
 
 #endif /* __cplusplus */
 
