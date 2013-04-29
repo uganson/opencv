@@ -1371,3 +1371,30 @@ void MserFeatureDetector::detectImpl( const Mat& image, std::vector<KeyPoint>& k
 }
 
 }
+
+CvMSERParams cvMSERParams( int delta, int minArea, int maxArea, float maxVariation, float minDiversity, int maxEvolution, double areaThreshold, double minMargin, int edgeBlurSize )
+{
+	CvMSERParams params;
+	params.delta = delta;
+	params.minArea = minArea;
+	params.maxArea = maxArea;
+	params.maxVariation = maxVariation;
+	params.minDiversity = minDiversity;
+	params.maxEvolution = maxEvolution;
+	params.areaThreshold = areaThreshold;
+	params.minMargin = minMargin;
+	params.edgeBlurSize = edgeBlurSize;
+	return params;
+}
+
+void cvExtractMSER( CvArr* _img,
+	       CvArr* _mask,
+	       CvSeq** _contours,
+	       CvMemStorage* storage,
+	       CvMSERParams params )
+{
+    cv::extractMSER( _img, _mask, _contours, storage,
+                     cv::MSERParams(params.delta, params.minArea, params.maxArea, params.maxVariation, params.minDiversity,
+                     params.maxEvolution, params.areaThreshold, params.minMargin, params.edgeBlurSize));
+}
+

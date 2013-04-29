@@ -1606,6 +1606,46 @@ protected:
 
 } /* namespace cv */
 
+// LEGACY SUPPORT FOR MSER
+/*!
+ Maximal Stable Regions Parameters
+*/
+typedef struct CvMSERParams
+{
+    //! delta, in the code, it compares (size_{i}-size_{i-delta})/size_{i-delta}
+    int delta;
+    //! prune the area which bigger than maxArea
+    int maxArea;
+    //! prune the area which smaller than minArea
+    int minArea;
+    //! prune the area have simliar size to its children
+    float maxVariation;
+    //! trace back to cut off mser with diversity < min_diversity
+    float minDiversity;
+    
+    /////// the next few params for MSER of color image
+    
+    //! for color image, the evolution steps
+    int maxEvolution;
+    //! the area threshold to cause re-initialize
+    double areaThreshold;
+    //! ignore too small margin
+    double minMargin;
+    //! the aperture size for edge blur
+    int edgeBlurSize;
+} CvMSERParams;
+
+CVAPI(CvMSERParams) cvMSERParams( int delta CV_DEFAULT(5), int min_area CV_DEFAULT(60),
+                           int max_area CV_DEFAULT(14400), float max_variation CV_DEFAULT(.25f),
+                           float min_diversity CV_DEFAULT(.2f), int max_evolution CV_DEFAULT(200),
+                           double area_threshold CV_DEFAULT(1.01),
+                           double min_margin CV_DEFAULT(.003),
+                           int edge_blur_size CV_DEFAULT(5) );
+
+// Extracts the contours of Maximally Stable Extremal Regions
+CVAPI(void) cvExtractMSER( CvArr* _img, CvArr* _mask, CvSeq** contours, CvMemStorage* storage, CvMSERParams params ); 
+
+
 #endif /* __cplusplus */
 
 #endif
