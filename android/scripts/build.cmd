@@ -71,8 +71,8 @@ ECHO. & ECHO cmake failed &	GOTO end
 
 :: run make
 ECHO. & ECHO Building native libs...
-IF %BUILD_WITH_NINJA%==0 ("%MAKE%" -j %NUMBER_OF_PROCESSORS% VERBOSE=%VERBOSE%) || (ECHO. & ECHO make failed & GOTO end)
-IF %BUILD_WITH_NINJA%==1 ("%MAKE%") || (ECHO. & ECHO ninja failed & GOTO end)
+IF %BUILD_WITH_NINJA%==0 ("%MAKE%" -j %NUMBER_OF_PROCESSORS% VERBOSE=%VERBOSE% install) || (ECHO. & ECHO make failed & GOTO end)
+IF %BUILD_WITH_NINJA%==1 ("%MAKE%" install) || (ECHO. & ECHO ninja failed & GOTO end)
 
 IF NOT %BUILD_JAVA_PART%==1 GOTO end
 POPD && PUSHD %SOURCE_DIR%

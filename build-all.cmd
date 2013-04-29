@@ -17,6 +17,9 @@ if errorlevel 1 goto error
 call build 11 x64 Release nopause
 if errorlevel 1 goto error
 
+call build-android.cmd nopause
+if errorlevel 1 goto error
+
 goto end
 
 :error
